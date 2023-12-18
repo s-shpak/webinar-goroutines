@@ -2,6 +2,7 @@ package server
 
 import (
 	"log"
+	"migrations/internal/server/middleware"
 	"net/http"
 	"net/url"
 
@@ -17,10 +18,10 @@ func InitServer(h *Handlers) *http.Server {
 
 func initRouter(h *Handlers) http.Handler {
 	r := httprouter.New()
-	r.Handle("POST", "/employee", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	r.Handle("POST", "/employee", middleware.AddRequestID(func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		h.PutEmployee(r.Context(), w, r)
-	})
-	r.Handle("GET", "/employee-by-email/:email", func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	}))
+	r.Handle("GET", "/employee-by-email/:email", middleware.AddRequestID(func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		emailSanitized := p.ByName("email")
 		email, err := url.PathUnescape(emailSanitized)
 		if err != nil {
@@ -29,6 +30,6 @@ func initRouter(h *Handlers) http.Handler {
 			return
 		}
 		h.GetEmployeeByEmail(r.Context(), w, email)
-	})
+	}))
 	return r
 }
