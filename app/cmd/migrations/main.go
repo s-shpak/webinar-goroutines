@@ -8,12 +8,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"time"
 
 	"migrations/internal/config"
 	"migrations/internal/server"
 	"migrations/internal/store"
+
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
@@ -30,8 +31,10 @@ const (
 
 func run() (err error) {
 	// корневой контекст приложения
-	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt)
+	rootCtx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancelCtx()
+
+	g, ctx := errgroup.WithContext(rootCtx)
 
 	// нештатное завершение программы по таймауту
 	// происходит, если после завершения контекста
@@ -44,14 +47,6 @@ func run() (err error) {
 		log.Fatal("failed to gracefully shutdown the service")
 	})
 
-	// WaitGroup для отслеживания того, какие компоненты приложения
-	// успешно завершились
-	wg := &sync.WaitGroup{}
-	defer func() {
-		// при выходе из функции ожидаем завершения компонентов приложения
-		wg.Wait()
-	}()
-
 	cfg := config.GetConfig()
 
 	// открытие соединения – относительно долгая, io-bound операция
@@ -62,56 +57,38 @@ func run() (err error) {
 	}
 
 	// отслеживаем успешное закрытие соединения с БД
-	watchDB(ctx, wg, db)
-
-	h := server.NewHandlers(db)
-	srv := server.InitServer(h)
-
-	// канал для получения критических ошибок компонентов
-	componentsErrs := make(chan error, 1)
-	// запускаем и отслеживаем успешное завершение работы сервера
-	manageServer(ctx, wg, srv, componentsErrs)
-
-	select {
-	// завершаем выполнение при закрытии корневого контекста
-	case <-ctx.Done():
-	// завершаем выполнение, если в компоненте произошла критическая ошибка
-	case err := <-componentsErrs:
-		log.Print(err)
-		cancelCtx()
-	}
-
-	return nil
-}
-
-func watchDB(ctx context.Context, wg *sync.WaitGroup, db *store.DB) {
-	wg.Add(1)
-	go func() {
+	g.Go(func() error {
 		defer log.Print("closed DB")
-		defer wg.Done()
 
 		<-ctx.Done()
 
 		db.Close()
-	}()
-}
+		return nil
+	})
 
-func manageServer(ctx context.Context, wg *sync.WaitGroup, srv *http.Server, errs chan<- error) {
+	h := server.NewHandlers(db)
+	srv := server.InitServer(h)
+
 	// запуск сервера
-	go func(errs chan<- error) {
-		if err := srv.ListenAndServe(); err != nil {
+	g.Go(func() (err error) {
+		defer func() {
+			errRec := recover()
+			if errRec != nil {
+				err = fmt.Errorf("a panic occurred: %v", errRec)
+			}
+		}()
+		if err = srv.ListenAndServe(); err != nil {
 			if errors.Is(err, http.ErrServerClosed) {
 				return
 			}
-			errs <- fmt.Errorf("listen and server has failed: %w", err)
+			return fmt.Errorf("listen and server has failed: %w", err)
 		}
-	}(errs)
+		return nil
+	})
 
 	// отслеживаем успешное завершение работы сервера
-	wg.Add(1)
-	go func() {
+	g.Go(func() error {
 		defer log.Print("server has been shutdown")
-		defer wg.Done()
 		<-ctx.Done()
 
 		shutdownTimeoutCtx, cancelShutdownTimeoutCtx := context.WithTimeout(context.Background(), timeoutServerShutdown)
@@ -119,5 +96,12 @@ func manageServer(ctx context.Context, wg *sync.WaitGroup, srv *http.Server, err
 		if err := srv.Shutdown(shutdownTimeoutCtx); err != nil {
 			log.Printf("an error occurred during server shutdown: %v", err)
 		}
-	}()
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		log.Print(err)
+	}
+
+	return nil
 }

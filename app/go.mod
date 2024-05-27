@@ -1,6 +1,6 @@
 module migrations
 
-go 1.20
+go 1.22.3
 
 require (
 	github.com/golang-migrate/migrate/v4 v4.16.2
@@ -9,6 +9,7 @@ require (
 	github.com/jackc/pgx/v5 v5.3.1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/ory/dockertest v3.3.5+incompatible
+	golang.org/x/sync v0.2.0
 )
 
 require (
@@ -38,7 +39,6 @@ require (
 	golang.org/x/crypto v0.7.0 // indirect
 	golang.org/x/mod v0.10.0 // indirect
 	golang.org/x/net v0.10.0 // indirect
-	golang.org/x/sync v0.2.0 // indirect
 	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/tools v0.9.1 // indirect
