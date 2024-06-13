@@ -29,9 +29,9 @@ func main() {
 
 		bMux.Lock()
 		time.Sleep(1 * time.Second)
-		a = 2
+		b = 2
 		aMux.Lock()
-		b = 3
+		a = 3
 		aMux.Unlock()
 		bMux.Unlock()
 	}()

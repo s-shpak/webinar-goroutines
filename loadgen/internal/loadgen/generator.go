@@ -33,8 +33,8 @@ func generate(ctx context.Context, cfg Config) (loadTestResult, error) {
 		return loadTestResult{}, fmt.Errorf("failed to get a new names fetcher: %w", err)
 	}
 
-	//return runGeneratorNominal(ctx, cfg, f)
-	return runGenerator(ctx, cfg, f)
+	return runGeneratorNominal(ctx, cfg, f)
+	//return runGenerator(ctx, cfg, f)
 }
 
 type namesFetcher interface {

@@ -100,7 +100,7 @@ func run() (err error) {
 	})
 
 	if err := g.Wait(); err != nil {
-		log.Print(err)
+		return err
 	}
 
 	return nil
